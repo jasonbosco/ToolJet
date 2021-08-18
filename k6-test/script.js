@@ -22,10 +22,11 @@ export let options = {
       iterations: 1,
     },
     data_query_run_flow: {
-      executor: 'constant-vus',
+      executor: 'shared-iterations',
       exec: 'dataQueryRunFlow',
       vus: 1000,
-      duration: '10m',
+      iterations: 1000,
+      maxDuration: '10m',
     }
   }
 };
@@ -115,7 +116,9 @@ function setupApp(authToken) {
       Authorization: `Bearer ${authToken}`,
     },
   };
-  let payload = JSON.stringify({});
+  let payload = JSON.stringify({
+    name: 'Data Query Flow',
+  });
   let url = BASE_URL + '/apps';
   let response = http.post(url, payload, headers);
   const appID = response.json().id;
