@@ -22,10 +22,10 @@ export let options = {
       iterations: 1,
     },
     data_query_run_flow: {
-      executor: 'shared-iterations',
+      executor: 'per-vu-iterations',
       exec: 'dataQueryRunFlow',
       vus: 1000,
-      iterations: 1000,
+      iterations: 1,
       maxDuration: '10m',
     }
   }
