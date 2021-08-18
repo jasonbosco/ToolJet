@@ -11,18 +11,23 @@
  */
 
 import http from 'k6/http';
-import { group, check, sleep } from 'k6';
+import { group, check, sleep, fail } from 'k6';
 
 export let options = {
-  stages: [
-    { duration: '1m', target: 1000 }, // simulate ramp-up of traffic from 1 to 100 users over 5 minutes.
-    { duration: '5m', target: 1000 }, // stay at 1000 users for 10 minutes
-    { duration: '1m', target: 0 }, // ramp-down to 0 users
-  ],
-  thresholds: {
-    http_req_duration: ['p(99)<1500'], // 99% of requests must complete below 1.5s
-    http_req_failed: ['rate<0.01'], // during the whole test execution, the error rate must be lower than 1%.
-  },
+  scenarios: {
+    sanity_flow: {
+      executor: 'per-vu-iterations',
+      exec: 'sanityFlow',
+      vus: 1,
+      iterations: 1,
+    },
+    data_query_run_flow: {
+      executor: 'constant-vus',
+      exec: 'dataQueryRunFlow',
+      vus: 1000,
+      duration: '10m',
+    }
+  }
 };
 
 // Sleep duration between successive requests.
@@ -37,10 +42,26 @@ let APP_ID;
 let DATA_SOURCE_ID;
 let DATA_QUERY_ID;
 
+function runGroups(group) {
+  const groups = __ENV.RUN_GROUPS.split(',');
+  if (groups.includes('all')) return true;
+  if (groups.includes(group)) return true;
+
+  return false;
+}
+
+// setup is called only once per test
 export function setup() {
   const response = authenticate();
+  const authToken = response.json().auth_token;
+  let dataQueryRun = {};
 
-  return response.json().auth_token;
+  if (runGroups('data_query_run_flow')) {
+    console.log('updated')
+    dataQueryRun = setupApp(authToken);
+  }
+
+  return {authToken, dataQueryRun};
 }
 
 function randomString(length) {
@@ -54,11 +75,84 @@ function authenticate() {
   const url = BASE_URL + `/authenticate`;
   const headers = { headers: { 'Content-Type': 'application/json' } };
   const payload = JSON.stringify({
-    email: 'dev@tooljet.io',
-    password: 'password',
+    email: EMAIL,
+    password: PASSWORD,
   });
 
   return http.post(url, payload, headers);
+}
+
+function setupApp(authToken) {
+  // create app
+  const headers = {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${authToken}`,
+    },
+  };
+  let payload = JSON.stringify({
+    name: 'Data Query Flow',
+  });
+  let url = BASE_URL + '/apps';
+  let response = http.post(url, payload, headers);
+  const appID = response.json().id;
+
+  sleep(SLEEP_DURATION);
+
+  // create data source
+  payload = JSON.stringify({
+    app_id: appID,
+    name: 'MySQL',
+    kind: 'mysql',
+    options: [
+      {
+        key: 'host',
+        value: 'localhost',
+      },
+      {
+        key: 'port',
+        value: 3306,
+      },
+      {
+        key: 'database',
+        value: 'load_test',
+      },
+      {
+        key: 'username',
+        value: 'root',
+      },
+      {
+        key: 'password',
+        value: 'somepassword',
+        encrypted: true,
+      },
+    ],
+  });
+  url = BASE_URL + '/data_sources';
+  response = http.post(url, payload, headers);
+
+  const dataSourceID = response.json().id;
+  sleep(SLEEP_DURATION);
+
+  // create data query
+  payload = JSON.stringify({
+    app_id: appID,
+    name: 'mysqlloadtest',
+    kind: 'mysql',
+    options: {
+      query: __ENV.DATA_QUERY,
+      runOnPageLoad: true,
+    },
+    data_source_id: dataSourceID,
+  });
+  url = BASE_URL + '/data_queries';
+  response = http.post(url, payload, headers);
+
+  const dataQueryID = response.json().id;
+
+  sleep(SLEEP_DURATION);
+
+  return {appID, dataSourceID, dataQueryID};
 }
 
 function deleteAppAfterTest(authToken, appId) {
@@ -77,7 +171,9 @@ function deleteAppAfterTest(authToken, appId) {
   });
 }
 
-export default function (authToken) {
+export function sanityFlow({authToken}) {
+  if (runGroups('sanity_flow') == false) fail();
+
   group('unit tests', () => {
     group('POST /authenticate', () => {
       const response = authenticate();
@@ -100,9 +196,7 @@ export default function (authToken) {
             Authorization: `Bearer ${authToken}`,
           },
         };
-        const payload = JSON.stringify({
-          name: 'dev@tooljet.io',
-        });
+        const payload = JSON.stringify({});
         const url = BASE_URL + '/apps';
         let response = http.post(url, payload, headers);
 
@@ -284,5 +378,36 @@ export default function (authToken) {
 
     // teardown for specific app creaated
     deleteAppAfterTest(authToken, APP_ID);
+  });
+}
+
+export function dataQueryRunFlow({authToken, dataQueryRun}) {
+  group('user runs specific data query', () => {
+    const headers = {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+    };
+
+    const payload = JSON.stringify({
+      options: {},
+    });
+
+
+    // console.log(JSON.stringify(authToken))
+    // console.log(JSON.stringify(dataQueryRun))
+
+    const url = BASE_URL + `/data_queries/${dataQueryRun.dataQueryID}/run`;
+    let response = http.post(url, payload, headers);
+
+    // console.log(response.body);
+
+    check(response, {
+      'data query run returns 201': (r) => r.status === 201,
+      'data query run returns query result': (r) => r.json().data !== [],
+    });
+
+    sleep(SLEEP_DURATION);
   });
 }
