@@ -34,7 +34,7 @@ export let options = {
 // You might want to edit the value of this variable or remove calls to the sleep function on the script.
 const SLEEP_DURATION = 0.1;
 // Global variables should be initialized.
-const BASE_URL = 'http://localhost:3000/api';
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000/api';
 const EMAIL = 'dev@tooljet.io';
 const PASSWORD = 'password';
 
@@ -57,7 +57,6 @@ export function setup() {
   let dataQueryRun = {};
 
   if (runGroups('data_query_run_flow')) {
-    console.log('updated')
     dataQueryRun = setupApp(authToken);
   }
 
@@ -82,6 +81,32 @@ function authenticate() {
   return http.post(url, payload, headers);
 }
 
+function mysqlConfig() {
+  return [
+    {
+      key: 'host',
+      value: __ENV.MYSQL_HOST,
+    },
+    {
+      key: 'port',
+      value: __ENV.MYSQL_PORT,
+    },
+    {
+      key: 'database',
+      value: __ENV.MYSQL_DB,
+    },
+    {
+      key: 'username',
+      value: __ENV.MYSQL_USER,
+    },
+    {
+      key: 'password',
+      value: __ENV.MYSQL_PASSWORD,
+      encrypted: true,
+    },
+  ];
+}
+
 function setupApp(authToken) {
   // create app
   const headers = {
@@ -90,9 +115,7 @@ function setupApp(authToken) {
       Authorization: `Bearer ${authToken}`,
     },
   };
-  let payload = JSON.stringify({
-    name: 'Data Query Flow',
-  });
+  let payload = JSON.stringify({});
   let url = BASE_URL + '/apps';
   let response = http.post(url, payload, headers);
   const appID = response.json().id;
@@ -104,29 +127,7 @@ function setupApp(authToken) {
     app_id: appID,
     name: 'MySQL',
     kind: 'mysql',
-    options: [
-      {
-        key: 'host',
-        value: 'localhost',
-      },
-      {
-        key: 'port',
-        value: 3306,
-      },
-      {
-        key: 'database',
-        value: 'load_test',
-      },
-      {
-        key: 'username',
-        value: 'root',
-      },
-      {
-        key: 'password',
-        value: 'somepassword',
-        encrypted: true,
-      },
-    ],
+    options: mysqlConfig(),
   });
   url = BASE_URL + '/data_sources';
   response = http.post(url, payload, headers);
@@ -283,29 +284,7 @@ export function sanityFlow({authToken}) {
           app_id: APP_ID,
           name: 'MySQL',
           kind: 'mysql',
-          options: [
-            {
-              key: 'host',
-              value: 'localhost',
-            },
-            {
-              key: 'port',
-              value: 3306,
-            },
-            {
-              key: 'database',
-              value: 'load_test',
-            },
-            {
-              key: 'username',
-              value: 'root',
-            },
-            {
-              key: 'password',
-              value: 'somepassword',
-              encrypted: true,
-            },
-          ],
+          options: mysqlConfig(),
         });
         const url = BASE_URL + '/data_sources';
         let response = http.post(url, payload, headers);
