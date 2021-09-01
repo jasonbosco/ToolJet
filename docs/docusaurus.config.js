@@ -12,8 +12,6 @@ module.exports = {
   themeConfig: {
     colorMode: {
       switchConfig: {
-        darkIcon: '\00a0 ',
-        lightIcon: '\00a0',
         darkIconStyle: {
           display: 'none',
         },
@@ -88,6 +86,26 @@ module.exports = {
       ],
       copyright: `Copyright © ${new Date().getFullYear()} ToolJet.`,
     },
+    typesense: {
+      typesenseCollectionName: 'tooljet_docs', // Replace with your own doc site's name. Should match the collection name in the scraper settings.
+
+      typesenseServerConfig: {
+        nodes: [
+          {
+            host: 'localhost',
+            port: 8108,
+            protocol: 'http',
+          },
+        ],
+        apiKey: 'xyz',
+      },
+
+      // Optional: Typesense search parameters: https://typesense.org/docs/0.21.0/api/documents.html#arguments
+      typesenseSearchParameters: {},
+
+      // Optional
+      contextualSearch: false,
+    },
   },
   presets: [
     [
@@ -105,4 +123,5 @@ module.exports = {
       },
     ],
   ],
+  themes: ['docusaurus-theme-search-typesense'],
 };
